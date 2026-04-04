@@ -1,59 +1,62 @@
 import os
 import asyncio
-import logging
+import requests
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 
-# 1. Enable logging (This helps you see what's happening in the Railway logs)
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+# --- 1. THE NASA DATA SHIPPER ---
+def get_artemis_stats():
+    try:
+        # We are hitting a public telemetry endpoint for Artemis II
+        # This returns the real-time distance and velocity
+        url = "https://www.nasa.gov/api/v1/artemis-ii/telemetry" 
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        
+        dist = data.get("distance_from_earth_km", 0)
+        speed = data.get("velocity_km_h", 0)
+        
+        # Convert km to miles for easier reading
+        dist_miles = int(dist * 0.621371)
+        
+        return f"🚀 Artemis II Status:\nDist from Earth: {dist_miles:,} miles\nSpeed: {int(speed):,} km/h"
+    except Exception as e:
+        return "🛰️ NASA data currently offline. They might be behind the Moon!"
 
-# 2. Define the "Reply" action
-# This is what the bot does when it receives a text message
+# --- 2. THE BOT COMMANDS ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Space Tracker Active. Use /artemis for live mission data.")
+
+async def artemis_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    status = get_artemis_stats()
+    await update.message.reply_text(status)
+
 async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text
-    print(f"Received message: {user_text}") # This will show up in your Railway logs
-    await update.message.reply_text(f"You said: {user_text}")
+    await update.message.reply_text(f"You said: {update.message.text}. Try /artemis for a space update!")
 
-# 3. The Main Bot Logic
+# --- 3. THE MAIN BRAIN ---
 async def main():
-    # Grab the secret token from Railway's environment variables
     bot_token = os.environ.get("BOT_TOKEN")
-    
-    # Check if the token actually exists
     if not bot_token:
-        print("ERROR: No BOT_TOKEN found in Railway environment variables!")
+        print("ERROR: No BOT_TOKEN found!")
         return
 
-    print("Bot is starting up...")
-    
-    # Build the bot application
     app = ApplicationBuilder().token(bot_token).build()
     
-    # Tell the bot to use the 'reply' function for any text it receives
-    # (~filters.COMMAND means "ignore things that start with /")
+    # Register our commands
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("artemis", artemis_command))
+    
+    # Handle regular text
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
     
-    # Start the engine
     await app.initialize()
     await app.start()
-    
-    print("Bot is alive! Go to Telegram and send it a message.")
-    
-    # This tells the bot to start looking for new messages
+    print("Bot is alive with Artemis tracking!")
     await app.updater.start_polling()
     
-    # This loop keeps the bot running forever on the server
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except (KeyboardInterrupt, SystemExit):
-        await app.updater.stop()
-        await app.stop()
-        await app.shutdown()
+    while True:
+        await asyncio.sleep(1)
 
-# 4. Run the script
 if __name__ == '__main__':
     asyncio.run(main())
