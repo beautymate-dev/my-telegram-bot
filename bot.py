@@ -519,6 +519,264 @@ def get_time(city: str):
         return "🕐 Could not fetch time data. Try again shortly."
 
 # ─────────────────────────────────────────────
+# SPORTS — API-Sports (same key, 5 separate APIs)
+# Each sport has its own base URL but identical
+# header auth and response structure
+# ─────────────────────────────────────────────
+
+SPORT_CONFIG = {
+    "rugby": {
+        "base_url": "https://v1.rugby.api-sports.io",
+        "emoji": "🏉",
+        "season": "2026",
+        "leagues": {
+            "super rugby": 5,
+            "rugby championship": 6,
+            "six nations": 8,
+            "premiership": 7,
+            "default": 5,
+            "default_name": "Super Rugby Pacific",
+        },
+    },
+    "f1": {
+        "base_url": "https://v1.formula-1.api-sports.io",
+        "emoji": "🏎️",
+        "season": "2026",
+        "leagues": {
+            "formula 1": 1,
+            "f1": 1,
+            "default": 1,
+            "default_name": "Formula 1",
+        },
+    },
+    "nba": {
+        "base_url": "https://v1.basketball.api-sports.io",
+        "emoji": "🏀",
+        "season": "2024-2025",
+        "leagues": {
+            "nba": 12,
+            "default": 12,
+            "default_name": "NBA",
+        },
+    },
+    "mlb": {
+        "base_url": "https://v1.baseball.api-sports.io",
+        "emoji": "⚾",
+        "season": "2026",
+        "leagues": {
+            "mlb": 1,
+            "default": 1,
+            "default_name": "MLB",
+        },
+    },
+    "nfl": {
+        "base_url": "https://v1.american-football.api-sports.io",
+        "emoji": "🏈",
+        "season": "2025",
+        "leagues": {
+            "nfl": 1,
+            "default": 1,
+            "default_name": "NFL",
+        },
+    },
+}
+
+# F1 uses "races" endpoint, others use "games"
+F1_SPORT = "f1"
+
+
+def get_sports(args: list):
+    try:
+        api_key = os.environ.get("SPORTS_API_KEY")
+        if not api_key:
+            return "❌ SPORTS_API_KEY not set. Register free at dashboard.api-sports.io and add it to Railway Variables."
+
+        if not args:
+            return (
+                "🏆 *Sports Results*\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "Usage: `/sports <sport> [league]`\n\n"
+                "Available sports:\n"
+                "  🏉 `/sports rugby` — Super Rugby (default)\n"
+                "  🏉 `/sports rugby six nations`\n"
+                "  🏉 `/sports rugby rugby championship`\n"
+                "  🏎️ `/sports f1` — Latest F1 race results\n"
+                "  🏀 `/sports nba` — Latest NBA scores\n"
+                "  ⚾ `/sports mlb` — Latest MLB scores\n"
+                "  🏈 `/sports nfl` — Latest NFL scores\n"
+            )
+
+        sport_key = args[0].lower()
+
+        # Handle aliases
+        aliases = {"formula1": "f1", "formula 1": "f1", "basketball": "nba",
+                   "baseball": "mlb", "american football": "nfl", "gridiron": "nfl"}
+        sport_key = aliases.get(sport_key, sport_key)
+
+        if sport_key not in SPORT_CONFIG:
+            return (
+                f"❌ Unknown sport *{args[0]}*.\n"
+                f"Try: `rugby`, `f1`, `nba`, `mlb`, `nfl`"
+            )
+
+        config = SPORT_CONFIG[sport_key]
+        base_url = config["base_url"]
+        emoji = config["emoji"]
+        season = config["season"]
+        leagues = config["leagues"]
+        headers = {"x-apisports-key": api_key}
+
+        # Work out league
+        league_query = " ".join(args[1:]).lower() if len(args) > 1 else ""
+        league_id = leagues["default"]
+        league_name = leagues["default_name"]
+
+        for name, lid in leagues.items():
+            if name in ["default", "default_name"]:
+                continue
+            if name in league_query:
+                league_id = lid
+                league_name = name.title()
+                break
+
+        # F1 uses /races endpoint, everything else uses /games
+        if sport_key == F1_SPORT:
+            endpoint = f"{base_url}/races"
+            params = {"season": season, "last": 5}
+        else:
+            endpoint = f"{base_url}/games"
+            params = {"league": league_id, "season": season, "last": 5}
+
+        resp = requests.get(endpoint, headers=headers, params=params, timeout=10)
+        data = resp.json()
+
+        # Check API errors
+        errors = data.get("errors", {})
+        if errors:
+            err_msg = list(errors.values())[0] if errors else "Unknown error"
+            return f"❌ API error: {err_msg}"
+
+        results = data.get("response", [])
+
+        if not results:
+            return (
+                f"{emoji} *{league_name}*\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"No recent results found. Season may be between rounds or not yet started."
+            )
+
+        lines = [f"{emoji} *{league_name} — Recent Results*", "━━━━━━━━━━━━━━━━━━"]
+
+        if sport_key == F1_SPORT:
+            lines += _format_f1(results)
+        elif sport_key == "rugby":
+            lines += _format_rugby(results)
+        elif sport_key == "nba":
+            lines += _format_basketball(results)
+        elif sport_key == "mlb":
+            lines += _format_baseball(results)
+        elif sport_key == "nfl":
+            lines += _format_nfl(results)
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        print(f"Sports error: {e}")
+        return "🏆 Sports data unavailable right now. Try again shortly."
+
+
+def _status_icon(status: str) -> str:
+    if status in ["FT", "AOT", "POST", "F"]:
+        return "🔴 FT"
+    elif status in ["LIVE", "Q1", "Q2", "Q3", "Q4", "HT", "1H", "2H", "OT", "IN"]:
+        return "🟢 LIVE"
+    else:
+        return "📅 Upcoming"
+
+
+def _format_rugby(results):
+    lines = []
+    for g in results[:5]:
+        home = g["teams"]["home"]["name"]
+        away = g["teams"]["away"]["name"]
+        hs = g["scores"]["home"] if g["scores"]["home"] is not None else "-"
+        as_ = g["scores"]["away"] if g["scores"]["away"] is not None else "-"
+        status = _status_icon(g["status"]["short"])
+        date = g["date"][:10]
+        lines.append(f"\n{status} — {date}")
+        lines.append(f"  *{home}* {hs} – {as_} *{away}*")
+    return lines
+
+
+def _format_f1(results):
+    lines = []
+    for race in results[:5]:
+        name = race.get("competition", {}).get("name", "Race")
+        circuit = race.get("circuit", {}).get("name", "")
+        date = race.get("date", "")[:10]
+        status = race.get("status", "")
+        winner = None
+
+        if race.get("results"):
+            for r in race["results"]:
+                if r.get("position") == 1:
+                    driver = r.get("driver", {})
+                    winner = f"{driver.get('name', 'Unknown')}"
+                    break
+
+        lines.append(f"\n🏁 *{name}*")
+        if circuit:
+            lines.append(f"  📍 {circuit}")
+        lines.append(f"  📅 {date}")
+        if winner:
+            lines.append(f"  🥇 Winner: *{winner}*")
+        elif status == "Scheduled":
+            lines.append(f"  ⏳ Upcoming")
+    return lines
+
+
+def _format_basketball(results):
+    lines = []
+    for g in results[:5]:
+        home = g["teams"]["home"]["name"]
+        away = g["teams"]["visitors"]["name"]
+        hs = g["scores"]["home"]["points"] if g["scores"]["home"]["points"] is not None else "-"
+        as_ = g["scores"]["visitors"]["points"] if g["scores"]["visitors"]["points"] is not None else "-"
+        status = _status_icon(g["status"]["short"])
+        date = g["date"][:10]
+        lines.append(f"\n{status} — {date}")
+        lines.append(f"  *{home}* {hs} – {as_} *{away}*")
+    return lines
+
+
+def _format_baseball(results):
+    lines = []
+    for g in results[:5]:
+        home = g["teams"]["home"]["name"]
+        away = g["teams"]["away"]["name"]
+        hs = g["scores"]["home"]["total"] if g["scores"]["home"]["total"] is not None else "-"
+        as_ = g["scores"]["away"]["total"] if g["scores"]["away"]["total"] is not None else "-"
+        status = _status_icon(g["status"]["short"])
+        date = g["date"][:10]
+        lines.append(f"\n{status} — {date}")
+        lines.append(f"  *{home}* {hs} – {as_} *{away}*")
+    return lines
+
+
+def _format_nfl(results):
+    lines = []
+    for g in results[:5]:
+        home = g["teams"]["home"]["name"]
+        away = g["teams"]["away"]["name"]
+        hs = g["scores"]["home"]["total"] if g["scores"]["home"]["total"] is not None else "-"
+        as_ = g["scores"]["away"]["total"] if g["scores"]["away"]["total"] is not None else "-"
+        status = _status_icon(g["status"]["short"])
+        date = g["date"][:10]
+        lines.append(f"\n{status} — {date}")
+        lines.append(f"  *{home}* {hs} – {as_} *{away}*")
+    return lines
+
+# ─────────────────────────────────────────────
 # 7. BOT COMMANDS
 # ─────────────────────────────────────────────
 
@@ -528,7 +786,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
-        "👋 *Space & Earth Bot — Command Guide*\n"
+        "👋 *Dave's Bot — Command Guide*\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         "🚀 *SPACE*\n"
         "/artemis — Live Artemis II mission status, elapsed time & latest NASA updates\n"
@@ -555,6 +813,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🕐 *TIME*\n"
         "/time `<city>` — Current time and date in any major city\n"
         "Example: `/time Auckland` or `/time New York`\n\n"
+        "🏆 *SPORTS*\n"
+        "/sports `<sport>` — Latest results & scores\n"
+        "Sports: `rugby`, `f1`, `nba`, `mlb`, `nfl`\n"
+        "Rugby leagues: `super rugby`, `six nations`, `rugby championship`\n"
+        "Example: `/sports rugby six nations` or `/sports nba`\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "💡 Type /help anytime to see this menu."
     )
@@ -653,6 +916,15 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = get_time(city)
     await update.message.reply_text(result, parse_mode="Markdown")
 
+async def sports_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(get_sports([]), parse_mode="Markdown")
+        return
+    sport = context.args[0].lower()
+    await update.message.reply_text(f"🏆 Fetching {sport.upper()} results...", parse_mode="Markdown")
+    result = get_sports(context.args)
+    await update.message.reply_text(result, parse_mode="Markdown")
+
 # ─────────────────────────────────────────────
 # 8. MAIN
 # ─────────────────────────────────────────────
@@ -676,6 +948,7 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
     app.add_handler(CommandHandler("crypto", crypto_command))
     app.add_handler(CommandHandler("time", time_command))
+    app.add_handler(CommandHandler("sports", sports_command))
 
     await app.initialize()
     await app.start()
