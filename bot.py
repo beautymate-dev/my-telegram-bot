@@ -465,21 +465,27 @@ CITY_TIMEZONES = {
 
 def get_time(city: str):
     try:
+        api_key = os.environ.get("RAPIDAPI_KEY")
+        headers = {
+            "x-rapidapi-key": api_key,
+            "x-rapidapi-host": "world-time-api3.p.rapidapi.com"
+        }
+
         key = city.lower().strip()
         timezone_str = CITY_TIMEZONES.get(key)
         if not timezone_str:
             guessed = city.replace(" ", "_")
             for region in ["America", "Europe", "Asia", "Pacific", "Australia", "Africa"]:
-                test_url = f"https://gateway.timeapi.world/timezone/{region}/{guessed}"
-                r = requests.get(test_url, timeout=8)
+                test_url = f"https://world-time-api3.p.rapidapi.com/timezone/{region}/{guessed}"
+                r = requests.get(test_url, headers=headers, timeout=8)
                 if r.status_code == 200:
                     timezone_str = f"{region}/{guessed}"
                     break
         if not timezone_str:
             cities = ", ".join(sorted(CITY_TIMEZONES.keys()))
             return f"❌ Couldn't find timezone for *{city}*.\n\nKnown cities: {cities}"
-        url = f"https://gateway.timeapi.world/timezone/{timezone_str}"
-        r = requests.get(url, timeout=10)
+        url = f"https://world-time-api3.p.rapidapi.com/timezone/{timezone_str}"
+        r = requests.get(url, headers=headers, timeout=10)
         if r.status_code != 200:
             return f"❌ Could not fetch time for *{city}*. Try again shortly."
         data = r.json()
