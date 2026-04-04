@@ -519,165 +519,200 @@ def get_time(city: str):
         return "🕐 Could not fetch time data. Try again shortly."
 
 # ─────────────────────────────────────────────
-# SPORTS — API-Sports (same key, 5 separate APIs)
-# Each sport has its own base URL but identical
-# header auth and response structure
+# SPORTS — ESPN hidden API (no key required)
 # ─────────────────────────────────────────────
 
+ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
+
 SPORT_CONFIG = {
-    "rugby": {
-        "base_url": "https://v1.rugby.api-sports.io",
-        "emoji": "🏉",
-        "season": "2026",
-        "leagues": {
-            "super rugby": 5,
-            "rugby championship": 6,
-            "six nations": 8,
-            "premiership": 7,
-            "default": 5,
-            "default_name": "Super Rugby Pacific",
-        },
-    },
-    "f1": {
-        "base_url": "https://v1.formula-1.api-sports.io",
-        "emoji": "🏎️",
-        "season": "2026",
-        "leagues": {
-            "formula 1": 1,
-            "f1": 1,
-            "default": 1,
-            "default_name": "Formula 1",
-        },
+    "nfl": {
+        "url": f"{ESPN_BASE}/football/nfl/scoreboard",
+        "params": {},
+        "emoji": "🏈",
+        "name": "NFL",
     },
     "nba": {
-        "base_url": "https://v1.basketball.api-sports.io",
+        "url": f"{ESPN_BASE}/basketball/nba/scoreboard",
+        "params": {},
         "emoji": "🏀",
-        "season": "2024-2025",
-        "leagues": {
-            "nba": 12,
-            "default": 12,
-            "default_name": "NBA",
-        },
+        "name": "NBA",
     },
     "mlb": {
-        "base_url": "https://v1.baseball.api-sports.io",
+        "url": f"{ESPN_BASE}/baseball/mlb/scoreboard",
+        "params": {},
         "emoji": "⚾",
-        "season": "2026",
-        "leagues": {
-            "mlb": 1,
-            "default": 1,
-            "default_name": "MLB",
-        },
+        "name": "MLB",
     },
-    "nfl": {
-        "base_url": "https://v1.american-football.api-sports.io",
-        "emoji": "🏈",
-        "season": "2025",
-        "leagues": {
-            "nfl": 1,
-            "default": 1,
-            "default_name": "NFL",
-        },
+    "f1": {
+        "url": f"{ESPN_BASE}/racing/f1/scoreboard",
+        "params": {},
+        "emoji": "🏎️",
+        "name": "Formula 1",
+    },
+    "rugby": {
+        "url": f"{ESPN_BASE}/rugby/scoreboard",
+        "params": {"league": "242041"},
+        "emoji": "🏉",
+        "name": "Super Rugby Pacific",
+    },
+    "sixnations": {
+        "url": f"{ESPN_BASE}/rugby/scoreboard",
+        "params": {"league": "180659"},
+        "emoji": "🏉",
+        "name": "Six Nations",
+    },
+    "championship": {
+        "url": f"{ESPN_BASE}/rugby/scoreboard",
+        "params": {"league": "244293"},
+        "emoji": "🏉",
+        "name": "Rugby Championship",
     },
 }
 
-# F1 uses "races" endpoint, others use "games"
-F1_SPORT = "f1"
+SPORT_ALIASES = {
+    # F1
+    "f1": "f1", "formula1": "f1", "formula 1": "f1",
+    # NBA
+    "nba": "nba", "basketball": "nba",
+    # NFL
+    "nfl": "nfl", "american football": "nfl", "gridiron": "nfl",
+    # MLB
+    "mlb": "mlb", "baseball": "mlb",
+    # Rugby
+    "rugby": "rugby", "super rugby": "rugby", "super rugby pacific": "rugby",
+    "six nations": "sixnations", "sixnations": "sixnations", "6 nations": "sixnations",
+    "rugby championship": "championship", "championship": "championship",
+}
 
 
 def get_sports(args: list):
     try:
-        api_key = os.environ.get("SPORTS_API_KEY")
-        if not api_key:
-            return "❌ SPORTS_API_KEY not set. Register free at dashboard.api-sports.io and add it to Railway Variables."
-
         if not args:
             return (
-                "🏆 *Sports Results*\n"
+                "🏆 *Sports Scores — ESPN Live Data*\n"
                 "━━━━━━━━━━━━━━━━━━\n"
-                "Usage: `/sports <sport> [league]`\n\n"
-                "Available sports:\n"
-                "  🏉 `/sports rugby` — Super Rugby (default)\n"
-                "  🏉 `/sports rugby six nations`\n"
-                "  🏉 `/sports rugby rugby championship`\n"
-                "  🏎️ `/sports f1` — Latest F1 race results\n"
-                "  🏀 `/sports nba` — Latest NBA scores\n"
-                "  ⚾ `/sports mlb` — Latest MLB scores\n"
-                "  🏈 `/sports nfl` — Latest NFL scores\n"
+                "Usage: `/sports <sport>`\n\n"
+                "🏉 *Rugby*\n"
+                "  `/sports rugby` — Super Rugby Pacific\n"
+                "  `/sports six nations`\n"
+                "  `/sports rugby championship`\n\n"
+                "🏎️ *Motorsport*\n"
+                "  `/sports f1` — Formula 1\n\n"
+                "🏀 *Basketball*\n"
+                "  `/sports nba`\n\n"
+                "⚾ *Baseball*\n"
+                "  `/sports mlb`\n\n"
+                "🏈 *American Football*\n"
+                "  `/sports nfl`\n\n"
+                "ℹ️ Data powered by ESPN."
             )
 
-        sport_key = args[0].lower()
+        # Join all args to catch multi-word sports like "six nations"
+        query = " ".join(args).lower()
+        sport_key = SPORT_ALIASES.get(query)
 
-        # Handle aliases
-        aliases = {"formula1": "f1", "formula 1": "f1", "basketball": "nba",
-                   "baseball": "mlb", "american football": "nfl", "gridiron": "nfl"}
-        sport_key = aliases.get(sport_key, sport_key)
+        # If no match on full query, try just the first word
+        if not sport_key:
+            sport_key = SPORT_ALIASES.get(args[0].lower())
 
-        if sport_key not in SPORT_CONFIG:
+        if not sport_key:
             return (
-                f"❌ Unknown sport *{args[0]}*.\n"
-                f"Try: `rugby`, `f1`, `nba`, `mlb`, `nfl`"
+                f"❌ Unknown sport *{args[0]}*.\n\n"
+                f"Try: `rugby`, `six nations`, `rugby championship`, "
+                f"`f1`, `nba`, `mlb`, `nfl`"
             )
 
         config = SPORT_CONFIG[sport_key]
-        base_url = config["base_url"]
+        url = config["url"]
+        params = config.get("params", {})
         emoji = config["emoji"]
-        season = config["season"]
-        leagues = config["leagues"]
-        headers = {"x-apisports-key": api_key}
+        name = config["name"]
 
-        # Work out league
-        league_query = " ".join(args[1:]).lower() if len(args) > 1 else ""
-        league_id = leagues["default"]
-        league_name = leagues["default_name"]
+        resp = requests.get(url, params=params, timeout=10)
 
-        for name, lid in leagues.items():
-            if name in ["default", "default_name"]:
-                continue
-            if name in league_query:
-                league_id = lid
-                league_name = name.title()
-                break
-
-        # F1 uses /races endpoint, everything else uses /games
-        if sport_key == F1_SPORT:
-            endpoint = f"{base_url}/races"
-            params = {"season": season, "last": 5}
-        else:
-            endpoint = f"{base_url}/games"
-            params = {"league": league_id, "season": season, "last": 5}
-
-        resp = requests.get(endpoint, headers=headers, params=params, timeout=10)
-        data = resp.json()
-
-        # Check API errors
-        errors = data.get("errors", {})
-        if errors:
-            err_msg = list(errors.values())[0] if errors else "Unknown error"
-            return f"❌ API error: {err_msg}"
-
-        results = data.get("response", [])
-
-        if not results:
+        if resp.status_code == 404:
             return (
-                f"{emoji} *{league_name}*\n"
+                f"{emoji} *{name}*\n"
                 f"━━━━━━━━━━━━━━━━━━\n"
-                f"No recent results found. Season may be between rounds or not yet started."
+                f"⚠️ ESPN doesn't have a scoreboard for {name} right now.\n"
+                f"This may be off-season or the league may not be covered."
             )
 
-        lines = [f"{emoji} *{league_name} — Recent Results*", "━━━━━━━━━━━━━━━━━━"]
+        if resp.status_code != 200:
+            return f"{emoji} Could not reach ESPN for {name} data right now. Try again shortly."
 
-        if sport_key == F1_SPORT:
-            lines += _format_f1(results)
-        elif sport_key == "rugby":
-            lines += _format_rugby(results)
-        elif sport_key == "nba":
-            lines += _format_basketball(results)
-        elif sport_key == "mlb":
-            lines += _format_baseball(results)
-        elif sport_key == "nfl":
-            lines += _format_nfl(results)
+        data = resp.json()
+        events = data.get("events", [])
 
+        if not events:
+            season = data.get("season", {})
+            season_name = season.get("type", {}).get("name", "")
+            return (
+                f"{emoji} *{name}*\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"No games scheduled today.\n"
+                f"{'Season type: ' + season_name if season_name else 'Check back on a match day!'}"
+            )
+
+        lines = [f"{emoji} *{name} — Scores*", "━━━━━━━━━━━━━━━━━━"]
+
+        for event in events[:8]:
+            competitions = event.get("competitions", [{}])
+            if not competitions:
+                continue
+            competition = competitions[0]
+            competitors = competition.get("competitors", [])
+            status = event.get("status", {})
+            state = status.get("type", {}).get("state", "")        # pre, in, post
+            status_detail = status.get("type", {}).get("shortDetail", "")
+            display_clock = status.get("displayClock", "")
+            period = status.get("period", 0)
+
+            if len(competitors) < 2:
+                continue
+
+            home = next((c for c in competitors if c.get("homeAway") == "home"), competitors[0])
+            away = next((c for c in competitors if c.get("homeAway") == "away"), competitors[1])
+
+            home_name = home.get("team", {}).get("shortDisplayName", "?")
+            away_name = away.get("team", {}).get("shortDisplayName", "?")
+            home_score = home.get("score", "-")
+            away_score = away.get("score", "-")
+
+            # Determine winner for finished games
+            home_winner = home.get("winner", False)
+            away_winner = away.get("winner", False)
+
+            # Format team names — bold the winner
+            if state == "post":
+                home_display = f"*{home_name}*" if home_winner else home_name
+                away_display = f"*{away_name}*" if away_winner else away_name
+            else:
+                home_display = f"*{home_name}*"
+                away_display = f"*{away_name}*"
+
+            # Status icon and clock
+            if state == "post":
+                status_icon = "🔴 Final"
+            elif state == "in":
+                if sport_key == "f1":
+                    status_icon = f"🟢 Live — Lap {period}"
+                elif sport_key in ["nba", "nfl"]:
+                    status_icon = f"🟢 Live — {display_clock} Q{period}"
+                elif sport_key == "mlb":
+                    status_icon = f"🟢 Live — Inning {period}"
+                else:
+                    status_icon = f"🟢 Live — {display_clock}"
+            else:
+                status_icon = f"📅 {status_detail}"
+
+            lines.append(f"\n{status_icon}")
+            if state == "pre":
+                lines.append(f"  {away_display} vs {home_display}")
+            else:
+                lines.append(f"  {away_display} {away_score} – {home_score} {home_display}")
+
+        lines.append(f"\n📡 Source: ESPN")
         return "\n".join(lines)
 
     except Exception as e:
@@ -685,96 +720,14 @@ def get_sports(args: list):
         return "🏆 Sports data unavailable right now. Try again shortly."
 
 
-def _status_icon(status: str) -> str:
-    if status in ["FT", "AOT", "POST", "F"]:
-        return "🔴 FT"
-    elif status in ["LIVE", "Q1", "Q2", "Q3", "Q4", "HT", "1H", "2H", "OT", "IN"]:
-        return "🟢 LIVE"
-    else:
-        return "📅 Upcoming"
-
-
-def _format_rugby(results):
-    lines = []
-    for g in results[:5]:
-        home = g["teams"]["home"]["name"]
-        away = g["teams"]["away"]["name"]
-        hs = g["scores"]["home"] if g["scores"]["home"] is not None else "-"
-        as_ = g["scores"]["away"] if g["scores"]["away"] is not None else "-"
-        status = _status_icon(g["status"]["short"])
-        date = g["date"][:10]
-        lines.append(f"\n{status} — {date}")
-        lines.append(f"  *{home}* {hs} – {as_} *{away}*")
-    return lines
-
-
-def _format_f1(results):
-    lines = []
-    for race in results[:5]:
-        name = race.get("competition", {}).get("name", "Race")
-        circuit = race.get("circuit", {}).get("name", "")
-        date = race.get("date", "")[:10]
-        status = race.get("status", "")
-        winner = None
-
-        if race.get("results"):
-            for r in race["results"]:
-                if r.get("position") == 1:
-                    driver = r.get("driver", {})
-                    winner = f"{driver.get('name', 'Unknown')}"
-                    break
-
-        lines.append(f"\n🏁 *{name}*")
-        if circuit:
-            lines.append(f"  📍 {circuit}")
-        lines.append(f"  📅 {date}")
-        if winner:
-            lines.append(f"  🥇 Winner: *{winner}*")
-        elif status == "Scheduled":
-            lines.append(f"  ⏳ Upcoming")
-    return lines
-
-
-def _format_basketball(results):
-    lines = []
-    for g in results[:5]:
-        home = g["teams"]["home"]["name"]
-        away = g["teams"]["visitors"]["name"]
-        hs = g["scores"]["home"]["points"] if g["scores"]["home"]["points"] is not None else "-"
-        as_ = g["scores"]["visitors"]["points"] if g["scores"]["visitors"]["points"] is not None else "-"
-        status = _status_icon(g["status"]["short"])
-        date = g["date"][:10]
-        lines.append(f"\n{status} — {date}")
-        lines.append(f"  *{home}* {hs} – {as_} *{away}*")
-    return lines
-
-
-def _format_baseball(results):
-    lines = []
-    for g in results[:5]:
-        home = g["teams"]["home"]["name"]
-        away = g["teams"]["away"]["name"]
-        hs = g["scores"]["home"]["total"] if g["scores"]["home"]["total"] is not None else "-"
-        as_ = g["scores"]["away"]["total"] if g["scores"]["away"]["total"] is not None else "-"
-        status = _status_icon(g["status"]["short"])
-        date = g["date"][:10]
-        lines.append(f"\n{status} — {date}")
-        lines.append(f"  *{home}* {hs} – {as_} *{away}*")
-    return lines
-
-
-def _format_nfl(results):
-    lines = []
-    for g in results[:5]:
-        home = g["teams"]["home"]["name"]
-        away = g["teams"]["away"]["name"]
-        hs = g["scores"]["home"]["total"] if g["scores"]["home"]["total"] is not None else "-"
-        as_ = g["scores"]["away"]["total"] if g["scores"]["away"]["total"] is not None else "-"
-        status = _status_icon(g["status"]["short"])
-        date = g["date"][:10]
-        lines.append(f"\n{status} — {date}")
-        lines.append(f"  *{home}* {hs} – {as_} *{away}*")
-    return lines
+async def sports_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(get_sports([]), parse_mode="Markdown")
+        return
+    sport = " ".join(context.args).lower()
+    await update.message.reply_text(f"🏆 Fetching {sport.upper()} scores...", parse_mode="Markdown")
+    result = get_sports(context.args)
+    await update.message.reply_text(result, parse_mode="Markdown")
 
 # ─────────────────────────────────────────────
 # 7. BOT COMMANDS
@@ -814,10 +767,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/time `<city>` — Current time and date in any major city\n"
         "Example: `/time Auckland` or `/time New York`\n\n"
         "🏆 *SPORTS*\n"
-        "/sports `<sport>` — Latest results & scores\n"
-        "Sports: `rugby`, `f1`, `nba`, `mlb`, `nfl`\n"
-        "Rugby leagues: `super rugby`, `six nations`, `rugby championship`\n"
-        "Example: `/sports rugby six nations` or `/sports nba`\n"
+        "/sports `<sport>` — Latest scores powered by ESPN\n"
+        "Rugby: `rugby`, `six nations`, `rugby championship`\n"
+        "Other: `f1`, `nba`, `mlb`, `nfl`\n"
+        "Example: `/sports rugby` or `/sports six nations`\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "💡 Type /help anytime to see this menu."
     )
