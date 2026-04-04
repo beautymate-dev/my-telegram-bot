@@ -1,21 +1,21 @@
+import os
 import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 
-# This function tells the bot what to do when it gets a message
-async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
-    # The bot will reply with the exact same message you sent it
-    await update.message.reply_text(f"You said: {user_message}")
+# ... (keep your reply function at the top) ...
 
 async def main():
-    # ⚠️ REPLACE THE TEXT BELOW WITH YOUR ACTUAL BOT TOKEN FROM BOTFATHER
-    import os
-    # Instead of the long string, we tell it to look at the 'Variable' we just set
-    bot_token = os.getenv("BOT_TOKEN")
+    # This line is the magic part for Railway
+    bot_token = os.environ.get("BOT_TOKEN")
     
+    # This check helps us see if the token is actually being found
+    if not bot_token:
+        print("ERROR: No BOT_TOKEN found in environment variables!")
+        return
+
     print("Bot is starting up...")
-    app = ApplicationBuilder().token(bot_token).build()
+    app = ApplicationBuilder().token(bot_token).build() 
     
     # This tells the bot to listen for any text message and trigger the 'reply' function
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
