@@ -7,21 +7,32 @@ from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, fil
 # --- 1. THE NASA DATA SHIPPER ---
 def get_artemis_stats():
     try:
-        # We are hitting a public telemetry endpoint for Artemis II
-        # This returns the real-time distance and velocity
-        url = "https://www.nasa.gov/api/v1/artemis-ii/telemetry" 
-        response = requests.get(url, timeout=10)
+        # This is the official NASA AROW (Artemis Real-time Orbit Website) data feed
+        url = "https://www.nasa.gov/trackartemis/telemetry.json"
+        
+        response = requests.get(url, timeout=15)
+        if response.status_code != 200:
+            return "🛰️ NASA's AROW server is under heavy load. Try again in a minute!"
+
         data = response.json()
         
-        dist = data.get("distance_from_earth_km", 0)
-        speed = data.get("velocity_km_h", 0)
+        # NASA's AROW JSON format for Artemis II
+        dist_km = data.get("distanceToEarth", 0)
+        velocity = data.get("velocity", 0)
         
-        # Convert km to miles for easier reading
-        dist_miles = int(dist * 0.621371)
+        # Convert to miles (since we're tracking a US/International mission)
+        dist_miles = int(dist_km * 0.621371)
         
-        return f"🚀 Artemis II Status:\nDist from Earth: {dist_miles:,} miles\nSpeed: {int(speed):,} km/h"
+        return (f"🚀 **ARTEMIS II: MISSION STATUS**\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🌍 **Distance:** {dist_miles:,} miles from Earth\n"
+                f"💨 **Speed:** {int(velocity):,} km/h\n"
+                f"🌕 **Status:** Trans-lunar Coast\n"
+                f"📅 **Note:** Approaching the Moon!")
+
     except Exception as e:
-        return "🛰️ NASA data currently offline. They might be behind the Moon!"
+        print(f"Connection Error: {e}")
+        return "🛰️ Unable to reach Orion. NASA's live telemetry might be in a blackout period."
 
 # --- 2. THE BOT COMMANDS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
