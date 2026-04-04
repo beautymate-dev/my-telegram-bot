@@ -335,7 +335,188 @@ def get_news(args: list):
     except Exception as e:
         print(f"News error: {e}")
         return "📰 News unavailable right now. Try again shortly."
+        
+# ─────────────────────────────────────────────
+# CRYPTO — CoinGecko (free, no key)
+# ─────────────────────────────────────────────
 
+CRYPTO_IDS = {
+    "btc": "bitcoin", "bitcoin": "bitcoin",
+    "eth": "ethereum", "ethereum": "ethereum",
+    "sol": "solana", "solana": "solana",
+    "xrp": "ripple", "ripple": "ripple",
+    "bnb": "binancecoin", "binance": "binancecoin",
+    "doge": "dogecoin", "dogecoin": "dogecoin",
+    "ada": "cardano", "cardano": "cardano",
+    "avax": "avalanche-2", "avalanche": "avalanche-2",
+    "dot": "polkadot", "polkadot": "polkadot",
+    "matic": "matic-network", "polygon": "matic-network",
+}
+
+DEFAULT_CRYPTOS = ["bitcoin", "ethereum", "solana", "ripple", "dogecoin"]
+
+
+def get_crypto(args: list):
+    try:
+        if args:
+            ids = []
+            unknown = []
+            for arg in args:
+                key = arg.lower()
+                if key in CRYPTO_IDS:
+                    ids.append(CRYPTO_IDS[key])
+                else:
+                    unknown.append(arg.upper())
+            if unknown:
+                return f"❌ Unknown coin(s): {', '.join(unknown)}\n\nSupported: BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, DOT, MATIC"
+            # Deduplicate while preserving order
+            ids = list(dict.fromkeys(ids))
+        else:
+            ids = DEFAULT_CRYPTOS
+
+        url = "https://api.coingecko.com/api/v3/coins/markets"
+        params = {
+            "vs_currency": "usd",
+            "ids": ",".join(ids),
+            "order": "market_cap_desc",
+            "sparkline": False,
+            "price_change_percentage": "24h",
+        }
+        r = requests.get(url, params=params, timeout=10)
+        data = r.json()
+
+        if not data:
+            return "❌ Could not fetch crypto data. Try again shortly."
+
+        lines = ["₿ *Crypto Prices — USD*", "━━━━━━━━━━━━━━━━━━"]
+        for coin in data:
+            name = coin["name"]
+            symbol = coin["symbol"].upper()
+            price = coin["current_price"]
+            change = coin["price_change_percentage_24h"]
+            cap = coin["market_cap"]
+            high = coin["high_24h"]
+            low = coin["low_24h"]
+
+            arrow = "📈" if change >= 0 else "📉"
+            change_str = f"+{change:.2f}%" if change >= 0 else f"{change:.2f}%"
+
+            # Format price nicely depending on size
+            if price >= 1:
+                price_str = f"${price:,.2f}"
+            else:
+                price_str = f"${price:.6f}"
+
+            # Format market cap in billions/millions
+            if cap >= 1_000_000_000:
+                cap_str = f"${cap / 1_000_000_000:.2f}B"
+            else:
+                cap_str = f"${cap / 1_000_000:.2f}M"
+
+            lines.append(
+                f"\n*{name}* ({symbol})\n"
+                f"  💰 Price: {price_str}  {arrow} {change_str}\n"
+                f"  📊 24h: ${low:,.2f} — ${high:,.2f}\n"
+                f"  🏦 Market cap: {cap_str}"
+            )
+
+        lines.append("\n💡 Try: `/crypto btc eth sol` or `/crypto doge`")
+        return "\n".join(lines)
+
+    except Exception as e:
+        print(f"Crypto error: {e}")
+        return "₿ Crypto data unavailable right now. Try again shortly."
+
+
+# ─────────────────────────────────────────────
+# TIME — WorldTimeAPI (free, no key)
+# ─────────────────────────────────────────────
+
+CITY_TIMEZONES = {
+    "london": "Europe/London",
+    "new york": "America/New_York", "nyc": "America/New_York",
+    "los angeles": "America/Los_Angeles", "la": "America/Los_Angeles",
+    "chicago": "America/Chicago",
+    "toronto": "America/Toronto",
+    "sydney": "Australia/Sydney",
+    "melbourne": "Australia/Melbourne",
+    "auckland": "Pacific/Auckland",
+    "tokyo": "Asia/Tokyo",
+    "beijing": "Asia/Shanghai", "shanghai": "Asia/Shanghai",
+    "dubai": "Asia/Dubai",
+    "paris": "Europe/Paris",
+    "berlin": "Europe/Berlin",
+    "moscow": "Europe/Moscow",
+    "singapore": "Asia/Singapore",
+    "hong kong": "Asia/Hong_Kong", "hongkong": "Asia/Hong_Kong",
+    "mumbai": "Asia/Kolkata", "delhi": "Asia/Kolkata",
+    "cairo": "Africa/Cairo",
+    "johannesburg": "Africa/Johannesburg",
+    "sao paulo": "America/Sao_Paulo",
+    "mexico city": "America/Mexico_City",
+    "amsterdam": "Europe/Amsterdam",
+    "seoul": "Asia/Seoul",
+    "bangkok": "Asia/Bangkok",
+    "jakarta": "Asia/Jakarta",
+    "wellington": "Pacific/Auckland",
+    "christchurch": "Pacific/Auckland",
+}
+
+
+def get_time(city: str):
+    try:
+        key = city.lower().strip()
+        timezone_str = CITY_TIMEZONES.get(key)
+
+        if not timezone_str:
+            # Try WorldTimeAPI's timezone list directly
+            # Replace spaces with underscores for the URL
+            guessed = city.replace(" ", "_")
+            # Try a few common regions
+            for region in ["America", "Europe", "Asia", "Pacific", "Australia", "Africa"]:
+                test_url = f"http://worldtimeapi.org/api/timezone/{region}/{guessed}"
+                r = requests.get(test_url, timeout=8)
+                if r.status_code == 200:
+                    timezone_str = f"{region}/{guessed}"
+                    break
+
+        if not timezone_str:
+            cities = ", ".join(sorted(CITY_TIMEZONES.keys()))
+            return f"❌ Couldn't find timezone for *{city}*.\n\nKnown cities: {cities}"
+
+        url = f"http://worldtimeapi.org/api/timezone/{timezone_str}"
+        r = requests.get(url, timeout=10)
+
+        if r.status_code != 200:
+            return f"❌ Could not fetch time for *{city}*. Try again shortly."
+
+        data = r.json()
+        dt_str = data["datetime"]  # e.g. 2026-04-04T15:32:10.123456+12:00
+        abbr = data.get("abbreviation", "")
+        utc_offset = data.get("utc_offset", "")
+        day_of_week = data.get("day_of_week", 0)
+        week_number = data.get("week_number", "")
+
+        # Parse the datetime
+        dt = datetime.fromisoformat(dt_str)
+        day_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        day_name = day_names[day_of_week]
+        formatted = dt.strftime("%I:%M %p").lstrip("0")  # e.g. 3:32 PM
+        date_formatted = dt.strftime("%d %B %Y")  # e.g. 04 April 2026
+
+        return (
+            f"🕐 *Time in {city.title()}*\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"🕰 *{formatted}*\n"
+            f"📅 {day_name}, {date_formatted}\n"
+            f"🌐 Timezone: {timezone_str}\n"
+            f"⏱ UTC offset: {utc_offset} ({abbr})\n"
+            f"📆 Week: {week_number}"
+        )
+
+    except Exception as e:
+        print(f"Time error: {e}")
+        return "🕐 Could not fetch time data. Try again shortly."
 
 # ─────────────────────────────────────────────
 # 7. BOT COMMANDS
@@ -368,6 +549,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Categories: general, space, science, history, geography, film, music, sports, computers, animals, art\n"
         "Difficulty: easy, medium, hard\n"
         "Example: `/trivia space hard` or `/trivia` for a random one\n\n"
+        "₿ *CRYPTO*\n"
+        "/crypto `[coins]` — Live prices, 24h change & market cap in USD\n"
+        "Example: `/crypto` for top 5, or `/crypto btc eth doge`\n\n"
+        "🕐 *TIME*\n"
+        "/time `<city>` — Current time and date in any major city\n"
+        "Example: `/time Auckland` or `/time New York`\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "💡 Type /help anytime to see this menu."
     )
@@ -449,7 +636,22 @@ async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Not sure what you mean! Type /help to see all available commands.",
         parse_mode="Markdown"
     )
+async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("₿ Fetching crypto prices...", parse_mode="Markdown")
+    result = get_crypto(context.args)
+    await update.message.reply_text(result, parse_mode="Markdown")
 
+
+async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: `/time <city>` — e.g. `/time Tokyo` or `/time New York`",
+            parse_mode="Markdown"
+        )
+        return
+    city = " ".join(context.args)
+    result = get_time(city)
+    await update.message.reply_text(result, parse_mode="Markdown")
 
 # ─────────────────────────────────────────────
 # 8. MAIN
@@ -472,6 +674,8 @@ async def main():
     app.add_handler(CommandHandler("trivia", trivia_command))
     app.add_handler(CommandHandler("news", news_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
+    app.add_handler(CommandHandler("crypto", crypto_command))
+    app.add_handler(CommandHandler("time", time_command))
 
     await app.initialize()
     await app.start()
