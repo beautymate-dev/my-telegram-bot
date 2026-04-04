@@ -134,7 +134,7 @@ def get_weather(city: str):
 def get_forex(args: list):
     try:
         base = args[0].upper() if args else "USD"
-        majors = ["EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "CNY", "SGD"]
+        majors = ["EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "USD", "SGD"]
         quotes = [a.upper() for a in args[1:]] if len(args) >= 2 else [c for c in majors if c != base]
 
         url = "https://api.frankfurter.app/latest"
