@@ -474,7 +474,7 @@ def get_time(city: str):
             guessed = city.replace(" ", "_")
             # Try a few common regions
             for region in ["America", "Europe", "Asia", "Pacific", "Australia", "Africa"]:
-                test_url = f"http://worldtimeapi.org/api/timezone/{region}/{guessed}"
+               test_url = f"https://gateway.timeapi.world/timezone/{region}/{guessed}"
                 r = requests.get(test_url, timeout=8)
                 if r.status_code == 200:
                     timezone_str = f"{region}/{guessed}"
@@ -484,7 +484,7 @@ def get_time(city: str):
             cities = ", ".join(sorted(CITY_TIMEZONES.keys()))
             return f"❌ Couldn't find timezone for *{city}*.\n\nKnown cities: {cities}"
 
-        url = f"http://worldtimeapi.org/api/timezone/{timezone_str}"
+       url = f"https://gateway.timeapi.world/timezone/{timezone_str}"
         r = requests.get(url, timeout=10)
 
         if r.status_code != 200:
