@@ -10,7 +10,9 @@ async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def main():
     # ⚠️ REPLACE THE TEXT BELOW WITH YOUR ACTUAL BOT TOKEN FROM BOTFATHER
-    bot_token = "123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
+    import os
+    # Instead of the long string, we tell it to look at the 'Variable' we just set
+    bot_token = os.getenv("BOT_TOKEN")
     
     print("Bot is starting up...")
     app = ApplicationBuilder().token(bot_token).build()
