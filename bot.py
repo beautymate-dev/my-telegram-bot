@@ -467,43 +467,32 @@ def get_time(city: str):
     try:
         key = city.lower().strip()
         timezone_str = CITY_TIMEZONES.get(key)
-
         if not timezone_str:
-            # Try WorldTimeAPI's timezone list directly
-            # Replace spaces with underscores for the URL
             guessed = city.replace(" ", "_")
-            # Try a few common regions
             for region in ["America", "Europe", "Asia", "Pacific", "Australia", "Africa"]:
-               test_url = f"https://gateway.timeapi.world/timezone/{region}/{guessed}"
+                test_url = f"https://gateway.timeapi.world/timezone/{region}/{guessed}"
                 r = requests.get(test_url, timeout=8)
                 if r.status_code == 200:
                     timezone_str = f"{region}/{guessed}"
                     break
-
         if not timezone_str:
             cities = ", ".join(sorted(CITY_TIMEZONES.keys()))
             return f"❌ Couldn't find timezone for *{city}*.\n\nKnown cities: {cities}"
-
-       url = f"https://gateway.timeapi.world/timezone/{timezone_str}"
+        url = f"https://gateway.timeapi.world/timezone/{timezone_str}"
         r = requests.get(url, timeout=10)
-
         if r.status_code != 200:
             return f"❌ Could not fetch time for *{city}*. Try again shortly."
-
         data = r.json()
-        dt_str = data["datetime"]  # e.g. 2026-04-04T15:32:10.123456+12:00
+        dt_str = data["datetime"]
         abbr = data.get("abbreviation", "")
         utc_offset = data.get("utc_offset", "")
         day_of_week = data.get("day_of_week", 0)
         week_number = data.get("week_number", "")
-
-        # Parse the datetime
         dt = datetime.fromisoformat(dt_str)
         day_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         day_name = day_names[day_of_week]
-        formatted = dt.strftime("%I:%M %p").lstrip("0")  # e.g. 3:32 PM
-        date_formatted = dt.strftime("%d %B %Y")  # e.g. 04 April 2026
-
+        formatted = dt.strftime("%I:%M %p").lstrip("0")
+        date_formatted = dt.strftime("%d %B %Y")
         return (
             f"🕐 *Time in {city.title()}*\n"
             f"━━━━━━━━━━━━━━━━━━\n"
@@ -513,7 +502,6 @@ def get_time(city: str):
             f"⏱ UTC offset: {utc_offset} ({abbr})\n"
             f"📆 Week: {week_number}"
         )
-
     except Exception as e:
         print(f"Time error: {e}")
         return "🕐 Could not fetch time data. Try again shortly."
