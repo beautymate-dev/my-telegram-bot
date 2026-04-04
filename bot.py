@@ -132,10 +132,6 @@ def get_weather(city: str):
 # ─────────────────────────────────────────────
 
 def get_forex(args: list):
-    """
-    Usage: /forex USD EUR   → rate from USD to EUR
-           /forex USD        → USD vs a basket of majors
-    """
     try:
         base = args[0].upper() if args else "USD"
         majors = ["EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "CNY", "SGD"]
@@ -145,8 +141,9 @@ def get_forex(args: list):
         else:
             quotes = [c for c in majors if c != base]
 
-        url = "https://api.frankfurter.dev/v2/rates"
-        r = requests.get(url, params={"base": base, "quotes": ",".join(quotes)}, timeout=10)
+        # Use the stable .app endpoint — returns {"rates": {...}} directly
+        url = "https://api.frankfurter.app/latest"
+        r = requests.get(url, params={"from": base, "to": ",".join(quotes)}, timeout=10)
         data = r.json()
 
         if "rates" not in data:
