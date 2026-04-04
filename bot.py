@@ -550,25 +550,24 @@ SPORT_CONFIG = {
         "name": "Formula 1",
     },
     "rugby": {
-        "url": f"{ESPN_BASE}/rugby/scoreboard",
-        "params": {"league": "242041"},
+        "url": f"{ESPN_BASE}/rugby/242041/scoreboard",   # league ID in path
+        "params": {},
         "emoji": "🏉",
         "name": "Super Rugby Pacific",
     },
     "sixnations": {
-        "url": f"{ESPN_BASE}/rugby/scoreboard",
-        "params": {"league": "180659"},
+        "url": f"{ESPN_BASE}/rugby/180659/scoreboard",   # league ID in path
+        "params": {},
         "emoji": "🏉",
         "name": "Six Nations",
     },
     "championship": {
-        "url": f"{ESPN_BASE}/rugby/scoreboard",
-        "params": {"league": "244293"},
+        "url": f"{ESPN_BASE}/rugby/244293/scoreboard",   # league ID in path
+        "params": {},
         "emoji": "🏉",
         "name": "Rugby Championship",
     },
 }
-
 SPORT_ALIASES = {
     # F1
     "f1": "f1", "formula1": "f1", "formula 1": "f1",
