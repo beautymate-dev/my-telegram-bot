@@ -510,7 +510,7 @@ def get_time(city: str):
             f"⏱ UTC offset: {utc_offset} ({abbr})\n"
             f"📆 Week: {week_number}"
         )
-     except Exception as e:
+    except Exception as e:
         print(f"Time error: {e}")
         import traceback
         traceback.print_exc()
