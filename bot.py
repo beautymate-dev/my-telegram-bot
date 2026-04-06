@@ -432,6 +432,9 @@ def get_crypto(args: list):
 # TIME — WorldTimeAPI (free, no key)
 # ─────────────────────────────────────────────
 
+# ─────────────────────────────────────────────
+# TIME — pytz (no API needed)
+# ─────────────────────────────────────────────
 CITY_TIMEZONES = {
     "london": "Europe/London",
     "new york": "America/New_York", "nyc": "America/New_York",
@@ -460,62 +463,101 @@ CITY_TIMEZONES = {
     "jakarta": "Asia/Jakarta",
     "wellington": "Pacific/Auckland",
     "christchurch": "Pacific/Auckland",
+    "denver": "America/Denver",
+    "vancouver": "America/Vancouver",
+    "seattle": "America/Los_Angeles",
+    "san francisco": "America/Los_Angeles",
+    "miami": "America/New_York",
+    "karachi": "Asia/Karachi",
+    "lagos": "Africa/Lagos",
+    "nairobi": "Africa/Nairobi",
+    "istanbul": "Europe/Istanbul",
+    "rome": "Europe/Rome",
+    "madrid": "Europe/Madrid",
+    "zurich": "Europe/Zurich",
+    "taipei": "Asia/Taipei",
+    "kuala lumpur": "Asia/Kuala_Lumpur",
+    "manila": "Asia/Manila",
+    "dhaka": "Asia/Dhaka",
+    "fiji": "Pacific/Fiji",
+    "suva": "Pacific/Fiji",
+    "honolulu": "Pacific/Honolulu",
+    "hawaii": "Pacific/Honolulu",
 }
 
 
 def get_time(city: str):
     try:
-        api_key = os.environ.get("RAPIDAPI_KEY")
-        headers = {
-            "x-rapidapi-key": api_key,
-            "x-rapidapi-host": "world-time-api3.p.rapidapi.com"
-        }
+        import pytz
+
+        if not city:
+            cities = ", ".join(sorted(CITY_TIMEZONES.keys()))
+            return (
+                f"🕐 *World Time*\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"Usage: `/time <city>`\n\n"
+                f"Known cities: {cities}"
+            )
 
         key = city.lower().strip()
         timezone_str = CITY_TIMEZONES.get(key)
-        if not timezone_str:
-            guessed = city.replace(" ", "_")
-            for region in ["America", "Europe", "Asia", "Pacific", "Australia", "Africa"]:
-                test_url = f"https://world-time-api3.p.rapidapi.com/timezone/{region}/{guessed}"
-                r = requests.get(test_url, headers=headers, timeout=8)
-                if r.status_code == 200:
-                    timezone_str = f"{region}/{guessed}"
-                    break
+
         if not timezone_str:
             cities = ", ".join(sorted(CITY_TIMEZONES.keys()))
-            return f"❌ Couldn't find timezone for *{city}*.\n\nKnown cities: {cities}"
-        url = f"https://world-time-api3.p.rapidapi.com/timezone/{timezone_str}"
-        r = requests.get(url, headers=headers, timeout=10)
-        print(f"Time API status: {r.status_code}")
-        print(f"Time API response: {r.text}")
-        if r.status_code != 200:
-            return f"❌ Could not fetch time for *{city}*. Try again shortly."
-        data = r.json()
-        dt_str = data["datetime"]
-        abbr = data.get("abbreviation", "")
-        utc_offset = data.get("utc_offset", "")
-        day_of_week = data.get("day_of_week", 0)
-        week_number = data.get("week_number", "")
-        dt = datetime.fromisoformat(dt_str)
-        day_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-        day_name = day_names[day_of_week]
+            return (
+                f"❌ Couldn't find timezone for *{city}*.\n\n"
+                f"Known cities: {cities}"
+            )
+
+        tz = pytz.timezone(timezone_str)
+        dt = datetime.now(tz)
+
+        hour = dt.hour
+        if 5 <= hour < 12:
+            tod = "🌅 Morning"
+        elif 12 <= hour < 17:
+            tod = "☀️ Afternoon"
+        elif 17 <= hour < 21:
+            tod = "🌆 Evening"
+        else:
+            tod = "🌙 Night"
+
+        day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        day_name = day_names[dt.weekday()]
         formatted = dt.strftime("%I:%M %p").lstrip("0")
         date_formatted = dt.strftime("%d %B %Y")
+        utc_offset = dt.strftime("%z")
+        utc_offset_fmt = f"{utc_offset[:3]}:{utc_offset[3:]}"
+        abbr = dt.strftime("%Z")
+        week_number = dt.isocalendar()[1]
+
         return (
             f"🕐 *Time in {city.title()}*\n"
             f"━━━━━━━━━━━━━━━━━━\n"
             f"🕰 *{formatted}*\n"
             f"📅 {day_name}, {date_formatted}\n"
             f"🌐 Timezone: {timezone_str}\n"
-            f"⏱ UTC offset: {utc_offset} ({abbr})\n"
-            f"📆 Week: {week_number}"
+            f"⏱ UTC offset: {utc_offset_fmt} ({abbr})\n"
+            f"📆 Week: {week_number}\n"
+            f"{tod}"
         )
+
     except Exception as e:
         print(f"Time error: {e}")
         import traceback
         traceback.print_exc()
         return "🕐 Could not fetch time data. Try again shortly."
 
+
+async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
+    if not context.args:
+        await update.message.reply_text(get_time(""), parse_mode="Markdown")
+        return
+    city = " ".join(context.args)
+    result = get_time(city)
+    await update.message.reply_text(result, parse_mode="Markdown")
 # ─────────────────────────────────────────────
 # SPORTS — ESPN hidden API (no key required)
 # ─────────────────────────────────────────────
