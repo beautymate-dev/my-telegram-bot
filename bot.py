@@ -558,6 +558,7 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     city = " ".join(context.args)
     result = get_time(city)
     await update.message.reply_text(result, parse_mode="Markdown")
+    
 # ─────────────────────────────────────────────
 # SPORTS — ESPN hidden API (no key required)
 # ─────────────────────────────────────────────
