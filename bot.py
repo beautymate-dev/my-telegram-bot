@@ -486,6 +486,8 @@ def get_time(city: str):
             return f"❌ Couldn't find timezone for *{city}*.\n\nKnown cities: {cities}"
         url = f"https://world-time-api3.p.rapidapi.com/timezone/{timezone_str}"
         r = requests.get(url, headers=headers, timeout=10)
+                print(f"Time API status: {r.status_code}")
+                print(f"Time API response: {r.text}")
         if r.status_code != 200:
             return f"❌ Could not fetch time for *{city}*. Try again shortly."
         data = r.json()
@@ -508,8 +510,10 @@ def get_time(city: str):
             f"⏱ UTC offset: {utc_offset} ({abbr})\n"
             f"📆 Week: {week_number}"
         )
-    except Exception as e:
+     except Exception as e:
         print(f"Time error: {e}")
+        import traceback
+        traceback.print_exc()
         return "🕐 Could not fetch time data. Try again shortly."
 
 # ─────────────────────────────────────────────
