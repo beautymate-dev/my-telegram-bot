@@ -428,134 +428,6 @@ def get_crypto(args: list):
         return "₿ Crypto data unavailable right now. Try again shortly."
 
 # ─────────────────────────────────────────────
-# TIME — pytz (no API needed)
-# ─────────────────────────────────────────────
-CITY_TIMEZONES = {
-    "london": "Europe/London",
-    "new york": "America/New_York", "nyc": "America/New_York",
-    "los angeles": "America/Los_Angeles", "la": "America/Los_Angeles",
-    "chicago": "America/Chicago",
-    "toronto": "America/Toronto",
-    "sydney": "Australia/Sydney",
-    "melbourne": "Australia/Melbourne",
-    "auckland": "Pacific/Auckland",
-    "tokyo": "Asia/Tokyo",
-    "beijing": "Asia/Shanghai", "shanghai": "Asia/Shanghai",
-    "dubai": "Asia/Dubai",
-    "paris": "Europe/Paris",
-    "berlin": "Europe/Berlin",
-    "moscow": "Europe/Moscow",
-    "singapore": "Asia/Singapore",
-    "hong kong": "Asia/Hong_Kong", "hongkong": "Asia/Hong_Kong",
-    "mumbai": "Asia/Kolkata", "delhi": "Asia/Kolkata",
-    "cairo": "Africa/Cairo",
-    "johannesburg": "Africa/Johannesburg",
-    "sao paulo": "America/Sao_Paulo",
-    "mexico city": "America/Mexico_City",
-    "amsterdam": "Europe/Amsterdam",
-    "seoul": "Asia/Seoul",
-    "bangkok": "Asia/Bangkok",
-    "jakarta": "Asia/Jakarta",
-    "wellington": "Pacific/Auckland",
-    "christchurch": "Pacific/Auckland",
-    "denver": "America/Denver",
-    "vancouver": "America/Vancouver",
-    "seattle": "America/Los_Angeles",
-    "san francisco": "America/Los_Angeles",
-    "miami": "America/New_York",
-    "karachi": "Asia/Karachi",
-    "lagos": "Africa/Lagos",
-    "nairobi": "Africa/Nairobi",
-    "istanbul": "Europe/Istanbul",
-    "rome": "Europe/Rome",
-    "madrid": "Europe/Madrid",
-    "zurich": "Europe/Zurich",
-    "taipei": "Asia/Taipei",
-    "kuala lumpur": "Asia/Kuala_Lumpur",
-    "manila": "Asia/Manila",
-    "dhaka": "Asia/Dhaka",
-    "fiji": "Pacific/Fiji",
-    "suva": "Pacific/Fiji",
-    "honolulu": "Pacific/Honolulu",
-    "hawaii": "Pacific/Honolulu",
-}
-
-
-def get_time(city: str):
-    try:
-        import pytz
-
-        if not city:
-            cities = ", ".join(sorted(CITY_TIMEZONES.keys()))
-            return (
-                f"🕐 *World Time*\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"Usage: `/time <city>`\n\n"
-                f"Known cities: {cities}"
-            )
-
-        key = city.lower().strip()
-        timezone_str = CITY_TIMEZONES.get(key)
-
-        if not timezone_str:
-            cities = ", ".join(sorted(CITY_TIMEZONES.keys()))
-            return (
-                f"❌ Couldn't find timezone for {city}.\n\n"
-                f"Known cities: {cities}"
-            )
-
-        tz = pytz.timezone(timezone_str)
-        dt = datetime.now(tz)
-
-        hour = dt.hour
-        if 5 <= hour < 12:
-            tod = "🌅 Morning"
-        elif 12 <= hour < 17:
-            tod = "☀️ Afternoon"
-        elif 17 <= hour < 21:
-            tod = "🌆 Evening"
-        else:
-            tod = "🌙 Night"
-
-        day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        day_name = day_names[dt.weekday()]
-        formatted = dt.strftime("%I:%M %p").lstrip("0")
-        date_formatted = dt.strftime("%d %B %Y")
-        utc_offset = dt.strftime("%z")
-        utc_offset_fmt = f"{utc_offset[:3]}:{utc_offset[3:]}"
-        abbr = dt.strftime("%Z")
-        week_number = dt.isocalendar()[1]
-
-        return (
-            f"🕐 *Time in {city.title().replace('*', '').replace('_', '').replace('`', '')}*\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"🕰 *{formatted}*\n"
-            f"📅 {day_name}, {date_formatted}\n"
-            f"🌐 Timezone: {timezone_str}\n"
-            f"⏱ UTC offset: {utc_offset_fmt} ({abbr})\n"
-            f"📆 Week: {week_number}\n"
-            f"{tod}"
-        )
-
-    except Exception as e:
-        print(f"Time error: {e}")
-        import traceback
-        traceback.print_exc()
-        return "🕐 Could not fetch time data. Try again shortly."
-
-
-async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message:
-        return
-    if not context.args:
-        await update.message.reply_text(get_time(""), parse_mode="Markdown")
-        return
-    # Join args and lowercase immediately
-    city = " ".join(context.args).lower().strip()
-    result = get_time(city)
-    await update.message.reply_text(result, parse_mode="Markdown")
-    
-# ─────────────────────────────────────────────
 # SPORTS — ESPN hidden API (no key required)
 # ─────────────────────────────────────────────
 
@@ -799,9 +671,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "₿ *CRYPTO*\n"
         "/crypto `[coins]` — Live prices, 24h change & market cap in USD\n"
         "Example: `/crypto` for top 5, or `/crypto btc eth doge`\n\n"
-        "🕐 *TIME*\n"
-        "/time `<city>` — Current time and date in any major city\n"
-        "Example: `/time Auckland` or `/time New York`\n\n"
         "🏆 *SPORTS*\n"
         "/sports `<sport>` — Latest scores powered by ESPN\n"
         "Rugby: `rugby`, `six nations`, `rugby championship`\n"
@@ -936,7 +805,6 @@ async def main():
     app.add_handler(CommandHandler("news", news_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
     app.add_handler(CommandHandler("crypto", crypto_command))
-    app.add_handler(CommandHandler("time", time_command))
     app.add_handler(CommandHandler("sports", sports_command))
 
     await app.initialize()
