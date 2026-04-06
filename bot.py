@@ -427,11 +427,6 @@ def get_crypto(args: list):
         print(f"Crypto error: {e}")
         return "₿ Crypto data unavailable right now. Try again shortly."
 
-
-# ─────────────────────────────────────────────
-# TIME — WorldTimeAPI (free, no key)
-# ─────────────────────────────────────────────
-
 # ─────────────────────────────────────────────
 # TIME — pytz (no API needed)
 # ─────────────────────────────────────────────
@@ -505,7 +500,7 @@ def get_time(city: str):
         if not timezone_str:
             cities = ", ".join(sorted(CITY_TIMEZONES.keys()))
             return (
-                f"❌ Couldn't find timezone for *{city}*.\n\n"
+                f"❌ Couldn't find timezone for {city}.\n\n"
                 f"Known cities: {cities}"
             )
 
@@ -532,7 +527,7 @@ def get_time(city: str):
         week_number = dt.isocalendar()[1]
 
         return (
-            f"🕐 *Time in {city.title()}*\n"
+            f"🕐 *Time in {city.title().replace('*', '').replace('_', '').replace('`', '')}*\n"
             f"━━━━━━━━━━━━━━━━━━\n"
             f"🕰 *{formatted}*\n"
             f"📅 {day_name}, {date_formatted}\n"
@@ -555,7 +550,8 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(get_time(""), parse_mode="Markdown")
         return
-    city = " ".join(context.args)
+    # Join args and lowercase immediately
+    city = " ".join(context.args).lower().strip()
     result = get_time(city)
     await update.message.reply_text(result, parse_mode="Markdown")
     
