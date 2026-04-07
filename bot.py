@@ -103,8 +103,21 @@ def get_weather(city: str):
             "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
             "forecast_days": 4, "timezone": "auto",
         }
-        r = requests.get(url, params=params, timeout=10)
-        data = r.json()
+
+        # Retry up to 3 times with a 20 second timeout
+        last_error = None
+        for attempt in range(3):
+            try:
+                r = requests.get(url, params=params, timeout=20)
+                data = r.json()
+                break
+            except requests.exceptions.Timeout:
+                last_error = "timeout"
+                print(f"Weather attempt {attempt + 1} timed out, retrying...")
+                import time
+                time.sleep(3)
+        else:
+            return "⛅ Weather data unavailable right now (request timed out after 3 attempts)."
 
         cur = data["current"]
         daily = data["daily"]
@@ -804,9 +817,27 @@ async def main():
         hour=7,
         minute=0,
         args=[app.bot],
-        id="daily_weather"
+        id="weather_0700"
+    )
+    
+    scheduler.add_job(
+        scheduled_weather,
+        trigger="cron",
+        hour=12,
+        minute=0,
+        args=[app.bot],
+        id="weather_1200"
     )
 
+    scheduler.add_job(
+        scheduled_weather,
+        trigger="cron",
+        hour=17,
+        minute=0,
+        args=[app.bot],
+        id="weather_1700"
+    )
+    
     # BTC price alert check every hour
     scheduler.add_job(
         scheduled_crypto_alert,
