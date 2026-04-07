@@ -5,6 +5,8 @@ import html
 from datetime import datetime, timezone
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import pytz
 
 # ─────────────────────────────────────────────
 # CONSTANTS
@@ -32,6 +34,12 @@ TRIVIA_CATEGORIES = {
     "history": 23, "art": 25, "animals": 27, "space": 14,
 }
 
+# ─────────────────────────────────────────────
+# PROACTIVE SCHEDULER STATE
+# ─────────────────────────────────────────────
+
+# Store the last BTC price so we can detect significant changes
+last_btc_price = None
 
 # ─────────────────────────────────────────────
 # 1. ARTEMIS II
@@ -69,7 +77,6 @@ def get_artemis_stats():
         print(f"Artemis error: {e}")
         return "🛰️ Could not fetch Artemis data right now. Try again shortly."
 
-
 # ─────────────────────────────────────────────
 # 2. WEATHER — Open-Meteo
 # ─────────────────────────────────────────────
@@ -82,7 +89,6 @@ def geocode_city(city: str):
         return None, None, None
     loc = results[0]
     return loc["latitude"], loc["longitude"], loc.get("name", city)
-
 
 def get_weather(city: str):
     try:
@@ -99,6 +105,7 @@ def get_weather(city: str):
         }
         r = requests.get(url, params=params, timeout=10)
         data = r.json()
+
         cur = data["current"]
         daily = data["daily"]
         condition = WMO_CODES.get(cur["weather_code"], "❓ Unknown")
@@ -113,6 +120,7 @@ def get_weather(city: str):
             f"🌧 *Precip now:* {cur['precipitation']} mm",
             f"", f"📅 *3-Day Forecast:*",
         ]
+
         for i in range(1, 4):
             day = daily["time"][i]
             hi = daily["temperature_2m_max"][i]
@@ -125,7 +133,6 @@ def get_weather(city: str):
     except Exception as e:
         print(f"Weather error: {e}")
         return "⛅ Weather data unavailable right now. Try again shortly."
-
 
 # ─────────────────────────────────────────────
 # 3. FOREX — Frankfurter
@@ -150,14 +157,15 @@ def get_forex(args: list):
             f"📅 Rate date: {data.get('date', 'N/A')}",
             f"🏦 Source: European Central Bank", "",
         ]
+
         for currency, rate in data["rates"].items():
             lines.append(f"  *{currency}:* {rate}")
+
         lines.append("\nTip: `/forex GBP USD EUR` for a custom pair.")
         return "\n".join(lines)
     except Exception as e:
         print(f"Forex error: {e}")
         return "💱 Forex data unavailable right now. Try again shortly."
-
 
 # ─────────────────────────────────────────────
 # 4. APOD — NASA Astronomy Picture of the Day
@@ -183,7 +191,6 @@ def get_apod():
         url = data.get("url", "")
         hdurl = data.get("hdurl", url)
 
-        # Trim explanation to ~600 chars so it's readable in Telegram
         if len(explanation) > 600:
             explanation = explanation[:597] + "..."
 
@@ -199,26 +206,20 @@ def get_apod():
         if media_type == "image":
             return url, caption
         else:
-            # It's a video (e.g. YouTube) — can't send as photo
             return None, caption + f"\n🎬 [Watch here]({url})"
-
     except Exception as e:
         print(f"APOD error: {e}")
         return None, "🌌 Could not fetch today's APOD. Try again shortly."
-
 
 # ─────────────────────────────────────────────
 # 5. TRIVIA — Open Trivia DB
 # ─────────────────────────────────────────────
 
-# Store pending answers per user: {user_id: correct_answer}
 trivia_pending = {}
-
 
 def get_trivia(category_name: str = None, difficulty: str = None):
     try:
         params = {"amount": 1, "type": "multiple"}
-
         if category_name:
             cat = category_name.lower()
             if cat in TRIVIA_CATEGORIES:
@@ -242,14 +243,13 @@ def get_trivia(category_name: str = None, difficulty: str = None):
         category = html.unescape(q["category"])
         difficulty_label = q["difficulty"].capitalize()
 
-        # Shuffle options
         import random
         options = wrong + [correct]
         random.shuffle(options)
         letters = ["A", "B", "C", "D"]
-
         option_lines = []
         correct_letter = ""
+
         for i, opt in enumerate(options):
             option_lines.append(f"  *{letters[i]}:* {opt}")
             if opt == correct:
@@ -266,11 +266,9 @@ def get_trivia(category_name: str = None, difficulty: str = None):
         )
 
         return correct_letter, text
-
     except Exception as e:
         print(f"Trivia error: {e}")
         return None, "🎯 Could not fetch trivia right now. Try again shortly."
-
 
 # ─────────────────────────────────────────────
 # 6. NEWS — NewsAPI
@@ -282,9 +280,8 @@ def get_news(args: list):
         if not api_key:
             return "❌ NEWS_API_KEY not set. Get a free key at newsapi.org and add it to your environment."
 
-        # Parse args: /news [category] [country]
         category = None
-        country = "us"  # default
+        country = "us"
 
         for arg in [a.lower() for a in args]:
             if arg in NEWS_CATEGORIES:
@@ -317,25 +314,25 @@ def get_news(args: list):
         label += "*"
 
         lines = [label, "━━━━━━━━━━━━━━━━━━"]
+
         for i, article in enumerate(articles, 1):
             title = article.get("title", "No title").split(" - ")[0].strip()
             source = article.get("source", {}).get("name", "Unknown")
             url = article.get("url", "")
             lines.append(f"\n*{i}. {title}*")
-            lines.append(f"   📡 {source}")
+            lines.append(f"  📡 {source}")
             if url:
-                lines.append(f"   🔗 [Read more]({url})")
+                lines.append(f"  🔗 [Read more]({url})")
 
         lines.append(f"\n\n💡 Try: `/news technology nz` or `/news sports us`")
         lines.append(f"Categories: {', '.join(NEWS_CATEGORIES)}")
         lines.append(f"Countries: {', '.join(NEWS_COUNTRIES.keys())}")
 
         return "\n".join(lines)
-
     except Exception as e:
         print(f"News error: {e}")
         return "📰 News unavailable right now. Try again shortly."
-        
+
 # ─────────────────────────────────────────────
 # CRYPTO — CoinGecko (free, no key)
 # ─────────────────────────────────────────────
@@ -355,7 +352,6 @@ CRYPTO_IDS = {
 
 DEFAULT_CRYPTOS = ["bitcoin", "ethereum", "solana", "ripple", "dogecoin"]
 
-
 def get_crypto(args: list):
     try:
         if args:
@@ -367,9 +363,10 @@ def get_crypto(args: list):
                     ids.append(CRYPTO_IDS[key])
                 else:
                     unknown.append(arg.upper())
+
             if unknown:
                 return f"❌ Unknown coin(s): {', '.join(unknown)}\n\nSupported: BTC, ETH, SOL, XRP, BNB, DOGE, ADA, AVAX, DOT, MATIC"
-            # Deduplicate while preserving order
+
             ids = list(dict.fromkeys(ids))
         else:
             ids = DEFAULT_CRYPTOS
@@ -382,6 +379,7 @@ def get_crypto(args: list):
             "sparkline": False,
             "price_change_percentage": "24h",
         }
+
         r = requests.get(url, params=params, timeout=10)
         data = r.json()
 
@@ -389,6 +387,7 @@ def get_crypto(args: list):
             return "❌ Could not fetch crypto data. Try again shortly."
 
         lines = ["₿ *Crypto Prices — USD*", "━━━━━━━━━━━━━━━━━━"]
+
         for coin in data:
             name = coin["name"]
             symbol = coin["symbol"].upper()
@@ -401,13 +400,11 @@ def get_crypto(args: list):
             arrow = "📈" if change >= 0 else "📉"
             change_str = f"+{change:.2f}%" if change >= 0 else f"{change:.2f}%"
 
-            # Format price nicely depending on size
             if price >= 1:
                 price_str = f"${price:,.2f}"
             else:
                 price_str = f"${price:.6f}"
 
-            # Format market cap in billions/millions
             if cap >= 1_000_000_000:
                 cap_str = f"${cap / 1_000_000_000:.2f}B"
             else:
@@ -415,14 +412,13 @@ def get_crypto(args: list):
 
             lines.append(
                 f"\n*{name}* ({symbol})\n"
-                f"  💰 Price: {price_str}  {arrow} {change_str}\n"
+                f"  💰 Price: {price_str} {arrow} {change_str}\n"
                 f"  📊 24h: ${low:,.2f} — ${high:,.2f}\n"
                 f"  🏦 Market cap: {cap_str}"
             )
 
         lines.append("\n💡 Try: `/crypto btc eth sol` or `/crypto doge`")
         return "\n".join(lines)
-
     except Exception as e:
         print(f"Crypto error: {e}")
         return "₿ Crypto data unavailable right now. Try again shortly."
@@ -434,64 +430,24 @@ def get_crypto(args: list):
 ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports"
 
 SPORT_CONFIG = {
-    "nfl": {
-        "url": f"{ESPN_BASE}/football/nfl/scoreboard",
-        "params": {},
-        "emoji": "🏈",
-        "name": "NFL",
-    },
-    "nba": {
-        "url": f"{ESPN_BASE}/basketball/nba/scoreboard",
-        "params": {},
-        "emoji": "🏀",
-        "name": "NBA",
-    },
-    "mlb": {
-        "url": f"{ESPN_BASE}/baseball/mlb/scoreboard",
-        "params": {},
-        "emoji": "⚾",
-        "name": "MLB",
-    },
-    "f1": {
-        "url": f"{ESPN_BASE}/racing/f1/scoreboard",
-        "params": {},
-        "emoji": "🏎️",
-        "name": "Formula 1",
-    },
-    "rugby": {
-        "url": f"{ESPN_BASE}/rugby/242041/scoreboard",   # league ID in path
-        "params": {},
-        "emoji": "🏉",
-        "name": "Super Rugby Pacific",
-    },
-    "sixnations": {
-        "url": f"{ESPN_BASE}/rugby/180659/scoreboard",   # league ID in path
-        "params": {},
-        "emoji": "🏉",
-        "name": "Six Nations",
-    },
-    "championship": {
-        "url": f"{ESPN_BASE}/rugby/244293/scoreboard",   # league ID in path
-        "params": {},
-        "emoji": "🏉",
-        "name": "Rugby Championship",
-    },
+    "nfl": {"url": f"{ESPN_BASE}/football/nfl/scoreboard", "params": {}, "emoji": "🏈", "name": "NFL"},
+    "nba": {"url": f"{ESPN_BASE}/basketball/nba/scoreboard", "params": {}, "emoji": "🏀", "name": "NBA"},
+    "mlb": {"url": f"{ESPN_BASE}/baseball/mlb/scoreboard", "params": {}, "emoji": "⚾", "name": "MLB"},
+    "f1": {"url": f"{ESPN_BASE}/racing/f1/scoreboard", "params": {}, "emoji": "🏎️", "name": "Formula 1"},
+    "rugby": {"url": f"{ESPN_BASE}/rugby/242041/scoreboard", "params": {}, "emoji": "🏉", "name": "Super Rugby Pacific"},
+    "sixnations": {"url": f"{ESPN_BASE}/rugby/180659/scoreboard", "params": {}, "emoji": "🏉", "name": "Six Nations"},
+    "championship": {"url": f"{ESPN_BASE}/rugby/244293/scoreboard", "params": {}, "emoji": "🏉", "name": "Rugby Championship"},
 }
+
 SPORT_ALIASES = {
-    # F1
     "f1": "f1", "formula1": "f1", "formula 1": "f1",
-    # NBA
     "nba": "nba", "basketball": "nba",
-    # NFL
     "nfl": "nfl", "american football": "nfl", "gridiron": "nfl",
-    # MLB
     "mlb": "mlb", "baseball": "mlb",
-    # Rugby
     "rugby": "rugby", "super rugby": "rugby", "super rugby pacific": "rugby",
     "six nations": "sixnations", "sixnations": "sixnations", "6 nations": "sixnations",
     "rugby championship": "championship", "championship": "championship",
 }
-
 
 def get_sports(args: list):
     try:
@@ -515,19 +471,16 @@ def get_sports(args: list):
                 "ℹ️ Data powered by ESPN."
             )
 
-        # Join all args to catch multi-word sports like "six nations"
         query = " ".join(args).lower()
         sport_key = SPORT_ALIASES.get(query)
 
-        # If no match on full query, try just the first word
         if not sport_key:
             sport_key = SPORT_ALIASES.get(args[0].lower())
 
         if not sport_key:
             return (
                 f"❌ Unknown sport *{args[0]}*.\n\n"
-                f"Try: `rugby`, `six nations`, `rugby championship`, "
-                f"`f1`, `nba`, `mlb`, `nfl`"
+                f"Try: `rugby`, `six nations`, `rugby championship`, `f1`, `nba`, `mlb`, `nfl`"
             )
 
         config = SPORT_CONFIG[sport_key]
@@ -571,7 +524,7 @@ def get_sports(args: list):
             competition = competitions[0]
             competitors = competition.get("competitors", [])
             status = event.get("status", {})
-            state = status.get("type", {}).get("state", "")        # pre, in, post
+            state = status.get("type", {}).get("state", "")
             status_detail = status.get("type", {}).get("shortDetail", "")
             display_clock = status.get("displayClock", "")
             period = status.get("period", 0)
@@ -586,12 +539,9 @@ def get_sports(args: list):
             away_name = away.get("team", {}).get("shortDisplayName", "?")
             home_score = home.get("score", "-")
             away_score = away.get("score", "-")
-
-            # Determine winner for finished games
             home_winner = home.get("winner", False)
             away_winner = away.get("winner", False)
 
-            # Format team names — bold the winner
             if state == "post":
                 home_display = f"*{home_name}*" if home_winner else home_name
                 away_display = f"*{away_name}*" if away_winner else away_name
@@ -599,7 +549,6 @@ def get_sports(args: list):
                 home_display = f"*{home_name}*"
                 away_display = f"*{away_name}*"
 
-            # Status icon and clock
             if state == "post":
                 status_icon = "🔴 Final"
             elif state == "in":
@@ -622,20 +571,78 @@ def get_sports(args: list):
 
         lines.append(f"\n📡 Source: ESPN")
         return "\n".join(lines)
-
     except Exception as e:
         print(f"Sports error: {e}")
         return "🏆 Sports data unavailable right now. Try again shortly."
 
+# ─────────────────────────────────────────────
+# PROACTIVE SCHEDULED JOBS
+# ─────────────────────────────────────────────
 
-async def sports_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text(get_sports([]), parse_mode="Markdown")
-        return
-    sport = " ".join(context.args).lower()
-    await update.message.reply_text(f"🏆 Fetching {sport.upper()} scores...", parse_mode="Markdown")
-    result = get_sports(context.args)
-    await update.message.reply_text(result, parse_mode="Markdown")
+async def scheduled_weather(bot):
+    """Send a morning weather forecast for Auckland every day at 7am NZT."""
+    try:
+        chat_id = os.environ.get("CHAT_ID")
+        if not chat_id:
+            print("CHAT_ID not set — skipping scheduled weather.")
+            return
+        result = get_weather("Auckland")
+        header = "🌅 *Good morning! Here's your daily weather forecast:*\n\n"
+        await bot.send_message(chat_id=chat_id, text=header + result, parse_mode="Markdown")
+        print("Scheduled weather sent.")
+    except Exception as e:
+        print(f"Scheduled weather error: {e}")
+
+
+async def scheduled_crypto_alert(bot):
+    """Check BTC price every hour. Alert if it has moved more than 3% since last check."""
+    global last_btc_price
+    try:
+        chat_id = os.environ.get("CHAT_ID")
+        if not chat_id:
+            print("CHAT_ID not set — skipping crypto alert.")
+            return
+
+        url = "https://api.coingecko.com/api/v3/coins/markets"
+        params = {
+            "vs_currency": "usd",
+            "ids": "bitcoin",
+            "order": "market_cap_desc",
+            "sparkline": False,
+            "price_change_percentage": "24h",
+        }
+        r = requests.get(url, params=params, timeout=10)
+        data = r.json()
+
+        if not data:
+            return
+
+        current_price = data[0]["current_price"]
+        change_24h = data[0]["price_change_percentage_24h"]
+
+        if last_btc_price is not None:
+            change_since_last = ((current_price - last_btc_price) / last_btc_price) * 100
+
+            if abs(change_since_last) >= 3:
+                direction = "📈 surged" if change_since_last > 0 else "📉 dropped"
+                arrow = "🟢" if change_since_last > 0 else "🔴"
+                msg = (
+                    f"{arrow} *BTC Price Alert!*\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"Bitcoin has {direction} *{change_since_last:+.2f}%* in the last hour.\n\n"
+                    f"💰 *Current price:* ${current_price:,.2f}\n"
+                    f"📊 *24h change:* {change_24h:+.2f}%\n"
+                    f"🕐 *Previous check:* ${last_btc_price:,.2f}"
+                )
+                await bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
+                print(f"BTC alert sent: {change_since_last:+.2f}%")
+
+        last_btc_price = current_price
+        print(f"BTC price checked: ${current_price:,.2f}")
+
+    except Exception as e:
+        print(f"Crypto alert error: {e}")
+
 
 # ─────────────────────────────────────────────
 # 7. BOT COMMANDS
@@ -643,7 +650,6 @@ async def sports_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await help_command(update, context)
-
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
@@ -681,12 +687,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-
 async def artemis_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🛰️ Fetching Artemis II status...")
     status = get_artemis_stats()
     await update.message.reply_text(status, parse_mode="Markdown")
-
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -697,7 +701,6 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = get_weather(city)
     await update.message.reply_text(result, parse_mode="Markdown")
 
-
 async def forex_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text("Usage: `/forex USD` or `/forex NZD USD GBP`", parse_mode="Markdown")
@@ -705,7 +708,6 @@ async def forex_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("💱 Fetching exchange rates...", parse_mode="Markdown")
     result = get_forex(context.args)
     await update.message.reply_text(result, parse_mode="Markdown")
-
 
 async def apod_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🌌 Fetching today's Astronomy Picture of the Day...")
@@ -715,7 +717,6 @@ async def apod_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(caption, parse_mode="Markdown")
 
-
 async def trivia_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     category = None
     difficulty = None
@@ -724,24 +725,34 @@ async def trivia_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             category = arg.lower()
         elif arg.lower() in ["easy", "medium", "hard"]:
             difficulty = arg.lower()
-
     correct_letter, text = get_trivia(category, difficulty)
     if correct_letter:
         trivia_pending[update.effective_user.id] = correct_letter
     await update.message.reply_text(text, parse_mode="Markdown")
-
 
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📰 Fetching headlines...", parse_mode="Markdown")
     result = get_news(context.args)
     await update.message.reply_text(result, parse_mode="Markdown", disable_web_page_preview=True)
 
+async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("₿ Fetching crypto prices...", parse_mode="Markdown")
+    result = get_crypto(context.args)
+    await update.message.reply_text(result, parse_mode="Markdown")
+
+async def sports_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text(get_sports([]), parse_mode="Markdown")
+        return
+    sport = " ".join(context.args).lower()
+    await update.message.reply_text(f"🏆 Fetching {sport.upper()} results...", parse_mode="Markdown")
+    result = get_sports(context.args)
+    await update.message.reply_text(result, parse_mode="Markdown")
 
 async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip().upper()
 
-    # Check if this is a trivia answer
     if user_id in trivia_pending and text in ["A", "B", "C", "D"]:
         correct = trivia_pending.pop(user_id)
         if text == correct:
@@ -757,31 +768,6 @@ async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Not sure what you mean! Type /help to see all available commands.",
         parse_mode="Markdown"
     )
-async def crypto_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("₿ Fetching crypto prices...", parse_mode="Markdown")
-    result = get_crypto(context.args)
-    await update.message.reply_text(result, parse_mode="Markdown")
-
-
-async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text(
-            "Usage: `/time <city>` — e.g. `/time Tokyo` or `/time New York`",
-            parse_mode="Markdown"
-        )
-        return
-    city = " ".join(context.args)
-    result = get_time(city)
-    await update.message.reply_text(result, parse_mode="Markdown")
-
-async def sports_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text(get_sports([]), parse_mode="Markdown")
-        return
-    sport = context.args[0].lower()
-    await update.message.reply_text(f"🏆 Fetching {sport.upper()} results...", parse_mode="Markdown")
-    result = get_sports(context.args)
-    await update.message.reply_text(result, parse_mode="Markdown")
 
 # ─────────────────────────────────────────────
 # 8. MAIN
@@ -803,9 +789,36 @@ async def main():
     app.add_handler(CommandHandler("apod", apod_command))
     app.add_handler(CommandHandler("trivia", trivia_command))
     app.add_handler(CommandHandler("news", news_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
     app.add_handler(CommandHandler("crypto", crypto_command))
     app.add_handler(CommandHandler("sports", sports_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply))
+
+    # ── Proactive Scheduler ──────────────────
+    nzt = pytz.timezone("Pacific/Auckland")
+    scheduler = AsyncIOScheduler(timezone=nzt)
+
+    # Daily weather at 7:00am NZT
+    scheduler.add_job(
+        scheduled_weather,
+        trigger="cron",
+        hour=7,
+        minute=0,
+        args=[app.bot],
+        id="daily_weather"
+    )
+
+    # BTC price alert check every hour
+    scheduler.add_job(
+        scheduled_crypto_alert,
+        trigger="interval",
+        hours=1,
+        args=[app.bot],
+        id="crypto_alert"
+    )
+
+    scheduler.start()
+    print("Scheduler started — daily weather at 7am NZT, crypto alerts every hour.")
+    # ─────────────────────────────────────────
 
     await app.initialize()
     await app.start()
@@ -814,7 +827,6 @@ async def main():
 
     while True:
         await asyncio.sleep(1)
-
 
 if __name__ == '__main__':
     asyncio.run(main())
