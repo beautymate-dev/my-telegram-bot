@@ -592,21 +592,6 @@ def get_sports(args: list):
 # PROACTIVE SCHEDULED JOBS
 # ─────────────────────────────────────────────
 
-async def scheduled_weather(bot):
-    """Send a morning weather forecast for Auckland every day at 7am NZT."""
-    try:
-        chat_id = os.environ.get("CHAT_ID")
-        if not chat_id:
-            print("CHAT_ID not set — skipping scheduled weather.")
-            return
-        result = get_weather("Auckland")
-        header = "🌅 *Good morning! Here's your daily weather forecast:*\n\n"
-        await bot.send_message(chat_id=chat_id, text=header + result, parse_mode="Markdown")
-        print("Scheduled weather sent.")
-    except Exception as e:
-        print(f"Scheduled weather error: {e}")
-
-
 async def scheduled_crypto_alert(bot):
     """Check BTC price every hour. Alert if it has moved more than 3% since last check."""
     global last_btc_price
@@ -810,34 +795,6 @@ async def main():
     nzt = pytz.timezone("Pacific/Auckland")
     scheduler = AsyncIOScheduler(timezone=nzt)
 
-    # Daily weather at 7:00am NZT
-    scheduler.add_job(
-        scheduled_weather,
-        trigger="cron",
-        hour=7,
-        minute=0,
-        args=[app.bot],
-        id="weather_0700"
-    )
-    
-    scheduler.add_job(
-        scheduled_weather,
-        trigger="cron",
-        hour=12,
-        minute=0,
-        args=[app.bot],
-        id="weather_1200"
-    )
-
-    scheduler.add_job(
-        scheduled_weather,
-        trigger="cron",
-        hour=17,
-        minute=0,
-        args=[app.bot],
-        id="weather_1700"
-    )
-    
     # BTC price alert check every hour
     scheduler.add_job(
         scheduled_crypto_alert,
@@ -848,7 +805,7 @@ async def main():
     )
 
     scheduler.start()
-    print("Scheduler started — daily weather at 7am NZT, crypto alerts every hour.")
+    print("Scheduler started — crypto alerts every hour.")
     # ─────────────────────────────────────────
 
     await app.initialize()
